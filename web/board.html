@@ -1,0 +1,73 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NPU · 监控占卡看板</title><style>
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top left,#eaf3ee 0,transparent 45%),#f5f7fa;color:#182b3b;font:14px system-ui,"Microsoft YaHei",sans-serif}main{max-width:1500px;margin:auto;padding:32px 28px 16px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}h1{font-size:25px;margin:4px 0}.eyebrow{color:#19866b;letter-spacing:3px;font-size:10px;font-weight:700}small,.muted{color:#738294}
+button{background:#163e36;color:white;border:0;padding:10px 18px;border-radius:10px;cursor:pointer;font:inherit;box-shadow:0 4px 12px #163e3620;transition:background .2s}button:hover{background:#205b4d}button:disabled{opacity:.55;cursor:wait}button.mini{padding:6px 12px;font-size:12px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}.stat{background:white;border:1px solid #e2e8ee;border-radius:12px;padding:12px 18px;font-size:12px;box-shadow:0 4px 18px #203a4d05}.stat strong{display:block;font-size:28px;line-height:1.2;margin:4px 0;font-variant-numeric:tabular-nums;letter-spacing:-1px}.stat:first-child{background:#e5f4ed;border-color:#c7e7d9}.stat:first-child strong{color:#126b4c}
+.toolbar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:#ffffff99;border:1px solid #e2e8ee;padding:8px 12px;border-radius:12px;margin-bottom:10px}select{padding:6px;border:1px solid #dce3e9;border-radius:8px;background:white}input{accent-color:#17825e}
+.auto{margin-left:auto;color:#427060;font-size:12px;display:flex;align-items:center;gap:6px}#countdown{background:#e4f1e9;border-radius:5px;min-width:40px;text-align:center;padding:3px 6px;font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto;background:white;border:1px solid #e2e8ee;border-radius:14px;box-shadow:0 8px 28px #203a4d06}table{border-collapse:collapse;width:100%;table-layout:fixed;min-width:1400px;white-space:nowrap}th{text-align:left;color:#738294;font-size:12px;font-weight:600;background:#fafbfd;padding:13px 18px;letter-spacing:.3px}td{padding:14px 18px;border-top:1px solid #edf0f3;vertical-align:top}tbody tr:hover{background:#f6faf8}
+.chip{display:inline-flex;justify-content:center;align-items:center;width:24px;height:26px;border-radius:6px;background:#e0f2e7;color:#15734f;font-weight:700;font-size:13px;margin:0 2px 3px 0}.chip.busy{background:#e8edf2;color:#5b6b7c;font-weight:500}.chip.ours{background:#fff0b3;color:#8a5b00;box-shadow:inset 0 0 0 1px #e6c65c}
+.badge{display:inline-block;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600}.b-idle{background:#e0f2e7;color:#13794f}.b-ours{background:#fff0b3;color:#8a5b00}.b-busy{background:#e8edf2;color:#4c5e70}.b-partial{background:#fcebdc;color:#9b632a}.b-unreach{background:#fbe3e3;color:#b64545}.b-excluded{background:#eee7fb;color:#7650a0}.b-op{background:#e7efff;color:#3159a6}
+.group{display:inline-block;border-radius:6px;padding:3px 7px;font-size:12px;font-weight:600}.g-a{background:#e7efff;color:#3159a6}.g-b{background:#eee7fb;color:#7650a0}
+.count{font-size:18px;font-weight:700;color:#168058}.name{font-family:Consolas,monospace;font-size:12px;color:#3f5367}.detail{height:28px;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.error{color:#b64545;white-space:normal}.empty{padding:65px;text-align:center;color:#738294}#status{margin:8px 0;min-height:16px}#status:empty{display:none}footer{margin-top:10px;color:#738294;font-size:11px;line-height:1.8}
+.actions button{margin:2px 4px 2px 0}.actions .muted{font-size:12px}
+@media(max-width:750px){main{padding:22px 14px}.stats{grid-template-columns:repeat(2,1fr)}h1{font-size:22px}.auto{margin-left:0}}
+</style><main><header><div><div class="eyebrow">ASCEND / RESOURCE MONITOR</div><h1>监控占卡看板</h1><small>16 台服务器 · 真实占卡（mockup 容器：90% 显存 + AICore 烧机）</small></div><button id="refresh">↻ 查询最新状态</button></header>
+<section class="stats">
+<div class="stat">空闲 NPU<strong id="t-free">—</strong><small>全部 16 台合计</small></div>
+<div class="stat">mockup占用<strong id="t-ours">—</strong><small>mockedup 容器占卡</small></div>
+<div class="stat">4P4D 组空卡<strong id="t-ga">—</strong><small>8 台 · 原集群</small></div>
+<div class="stat">扩展组空卡<strong id="t-gb">—</strong><small>8 台 · 新增</small></div>
+<div class="stat">整机空闲<strong id="t-idlem">—</strong><small id="t-fail">尚未查询</small></div>
+</section>
+<div class="toolbar"><select id="group"><option value="">全部机器</option><option value="a">4P4D 组</option><option value="b">扩展组</option></select><label><input type="checkbox" id="f-free"> 只看有空卡</label><label><input type="checkbox" id="f-ours"> 只看 mockup占用</label><span class="muted" id="time">等待查询</span><label class="auto"><input type="checkbox" id="auto" checked> 自动刷新 <span id="countdown">60s</span></label></div>
+<div id="status" role="status"></div>
+<div style="background:#e5f4ed;border:1px solid #c7e7d9;border-radius:12px;padding:12px 18px;margin-bottom:10px;font-size:13px;line-height:1.9"><b>📋 使用准则</b>：<b>1. 要用的时候</b> → 先在"占用人"列点 <b>+登记</b> 写自己的名字，再点 <b>停止全部容器</b>（同事的容器会保留、可 docker start 恢复）；<b>2. 释放的时候</b> → 点 <b>mockup 占卡</b> 把卡占住留给下一个人</div>
+<div class="tablewrap"><table><colgroup><col style="width:90px"><col style="width:130px"><col style="width:110px"><col style="width:290px"><col style="width:70px"><col style="width:150px"><col style="width:120px"><col><col style="width:190px"></colgroup><thead><tr><th>分组</th><th>服务器 IP</th><th>状态</th><th>卡片（0–7）</th><th>空卡数</th><th>占卡容器</th><th>占用人</th><th>其他容器</th><th>操作<br><small style="font-weight:400">mockup 占卡 ｜ 停止全部容器</small></th></tr></thead><tbody id="rows"><tr><td colspan="9" class="empty">点击右上角查询，读取 16 台服务器实时状态（约 10–25 秒）。</td></tr></tbody></table></div>
+<footer>绿 = 空闲 · 金 = mockup占用（mockedup 容器占 90% 显存 + AICore 计算）· 灰 = 他人占用 ｜ 使用准则：要用 = 登记 + 停止全部容器；释放 = mockup 占卡 ｜ 同事占用的机器可在"占用人"列点 +登记 写名字（纯登记不占硬件）｜ 鼠标悬停卡片号可看显存/进程详情 ｜ 占卡走安全门禁：有 vllm/ray 进程或卡被占的机器会被拒绝 ｜ 停止全部容器 = docker stop 该机所有运行中容器（同事的容器保留、可 docker start 恢复），我们的 mockedup 删除，显存全部归还 ｜ 60 秒自动刷新 · 查询失败不计为空闲</footer></main>
+<script>
+const $=id=>document.getElementById(id);const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let data=[],ops={},polling=false;
+const VERDICT={OURS:['b-ours','mockup占用'],IDLE:['b-idle','空闲'],BUSY:['b-busy','占用中'],PARTIAL:['b-partial','部分占用'],UNREACHABLE:['b-unreach','查询失败']};
+function holderCell(r){
+if(r.holder)return `<b>${esc(r.holder)}</b>${r.holder==='我'?` <button class="mini" data-unreg="${r.ip}" style="padding:2px 7px;font-size:11px">取消</button>`:''}`;
+return `<button class="mini" data-reg="${r.ip}" style="padding:4px 10px;font-size:11px;background:#f1f6f3;color:#527264;border:1px solid #d7e3dc;box-shadow:none">+登记</button>`}
+function fmtGb(mb){return (mb/1024).toFixed(1)}
+function chips(r){return r.cards.map(c=>{const t=fmtGb(c.hbm)+'GB'+(c.procs&&c.procs.length?' · '+c.procs.join(','):'');return `<span class="chip ${c.state}" title="卡${c.id} · ${t}">${c.id}</span>`}).join('')}
+function actions(r){const op=ops[r.ip];if(op&&op.state==='running')return `<span class="badge b-op">${op.op==='occupy'?'占卡中…':'停止中…'}</span>`;
+if(r.verdict==='IDLE')return `<button class="mini" data-occ="${r.ip}">mockup 占卡</button>`;
+if(r.verdict==='UNREACHABLE')return '<span class="muted">不可达</span>';
+return `<button class="mini" data-release="${r.ip}" style="${r.verdict!=='OURS'?'background:#f6e8e8;color:#8b3a3a;border:1px solid #e3c4c4;box-shadow:none':''}">停止全部容器</button>`}
+function render(){const rows=data.filter(r=>(!$('group').value||r.group===$('group').value)&&(!$('f-free').checked||r.cards.some(c=>c.state==='free'))&&(!$('f-ours').checked||r.verdict==='OURS'));
+$('rows').innerHTML=rows.map(r=>{const v=VERDICT[r.verdict]||['b-busy',r.verdict];const opRow=ops[r.ip];return `<tr><td><span class="group g-${r.group}">${r.group==='a'?'4P4D':'扩展'}</span></td><td><b>${esc(r.ip)}</b></td>${r.error?`<td colspan="7" class="error">查询失败：${esc(r.error)}</td>`:`<td><span class="badge ${v[0]}">${v[1]}</span>${opRow&&opRow.state==='failed'?`<div class="error" style="font-size:11px">${esc(opRow.message||'')}</div>`:''}</td><td>${chips(r)}</td><td class="count">${r.cards.filter(c=>c.state==='free').length}</td><td>${r.mockedup?`<div class="detail name" title="${esc(r.mockedup)}">${esc(r.mockedup)}</div>`:'<span class="muted">—</span>'}</td><td>${holderCell(r)}</td><td>${r.other_names&&r.other_names.length?r.other_names.map(n=>`<div class="detail name" title="${esc(n)}">${esc(n)}</div>`).join(''):'<span class="muted">无</span>'}</td><td class="actions">${actions(r)}</td>`}</tr>`}).join('')||'<tr><td colspan="9" class="empty">没有符合条件的机器</td></tr>'}
+async function load(){const b=$('refresh');if(b.disabled)return;b.disabled=true;b.textContent='查询中…';$('status').textContent='正在连接 16 台服务器，请稍候…';
+try{const res=await fetch('/api/status');if(!res.ok)throw Error(await res.text());const j=await res.json();data=j.servers;ops=j.ops||{};
+$('t-free').textContent=data.reduce((a,r)=>a+(r.cards?r.cards.filter(c=>c.state==='free').length:0),0);
+$('t-ours').textContent=data.filter(r=>r.verdict==='OURS').length+' 台';
+$('t-ga').textContent=data.filter(r=>r.group==='a').reduce((a,r)=>a+(r.cards?r.cards.filter(c=>c.state==='free').length:0),0);
+$('t-gb').textContent=data.filter(r=>r.group==='b').reduce((a,r)=>a+(r.cards?r.cards.filter(c=>c.state==='free').length:0),0);
+$('t-idlem').textContent=data.filter(r=>!r.error&&r.verdict==='IDLE').length;
+const fails=data.filter(r=>r.error).length;$('t-fail').textContent=fails?fails+' 台查询失败':'全部连接成功';
+$('time').textContent='更新于 '+j.time.replace('T',' ');$('status').textContent=fails?'部分机器查询失败，详情见表格。':'';render();
+if(Object.values(ops).some(o=>o.state==='running')&&!polling){polling=true;setTimeout(()=>{polling=false;load()},10000)}
+}catch(e){$('status').textContent='查询未完成：'+e.message}finally{b.disabled=false;b.textContent='↻ 查询最新状态';remaining=60}}
+$('rows').addEventListener('click',async e=>{const occ=e.target.dataset.occ,rel=e.target.dataset.release,reg=e.target.dataset.reg,unreg=e.target.dataset.unreg;
+if(reg||unreg){const ip=reg||unreg;
+if(reg){const name=prompt('登记占用人名字（仅写入登记记录，不占硬件；释放或重占时自动清除）',localStorage.getItem('boardName')||'');if(!name)return;localStorage.setItem('boardName',name);
+try{const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip,name})});const j=await res.json().catch(()=>({}));if(!res.ok){alert(j.error||'登记失败');return}$('status').textContent='已登记 '+ip+' → '+name;load()}catch(err){alert(err.message)}return}
+if(unreg){if(!confirm('取消该机的占用人登记？'))return;
+try{const res=await fetch('/api/unregister',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})});const j=await res.json().catch(()=>({}));if(!res.ok){alert(j.error||'取消失败');return}$('status').textContent='已取消 '+ip+' 的登记';load()}catch(err){alert(err.message)}return}}
+if(!occ&&!rel)return;
+const ip=occ||rel;const verb=occ?'占卡':'停止全部容器';let name='';
+if(occ){name=prompt('占用人名字（显示在"占用人"列，方便大家知道是谁在用；留空则仅标记为 mockup 占用）',localStorage.getItem('boardName')||'');if(name===null)return;if(name)localStorage.setItem('boardName',name)}
+if(!confirm(`确认在 ${ip} 上执行「${verb}」？`+(occ?'（将启动 mockedup 容器占用 8 卡 90% 显存并烧机'+(name?'，占用人：'+name:'')+'）':'（⚠ 将 docker stop 该机上全部运行中的容器（含同事的服务，容器保留可再 start），我们的 mockedup 直接删除，显存全部归还）')))return;
+e.target.disabled=true;try{const res=await fetch(occ?'/api/occupy':'/api/release',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip,name:name||''})});
+const j=await res.json().catch(()=>({}));if(!res.ok){alert(j.error||'操作失败');e.target.disabled=false;return}
+$('status').textContent=verb+'指令已提交：'+(j.message||'');if(occ&&j.async){polling=true;setTimeout(()=>{polling=false;load()},15000)}load();
+}catch(err){alert(err.message);e.target.disabled=false}});
+$('group').onchange=render;$('f-free').onchange=render;$('f-ours').onchange=render;
+$('refresh').onclick=load;let remaining=60;
+setInterval(()=>{if(document.hidden)return;if(!$('auto').checked){$('countdown').textContent='已暂停';return}if($('refresh').disabled){$('countdown').textContent='更新中';return}remaining--;$('countdown').textContent=remaining+'s';if(remaining<=0){remaining=60;$('refresh').click()}},1000);
+$('auto').onchange=()=>{remaining=60;$('countdown').textContent=$('auto').checked?'60s':'已暂停'};
+load();
+</script></html>
